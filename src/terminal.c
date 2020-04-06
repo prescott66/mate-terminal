@@ -431,52 +431,56 @@ name_lost_cb (GDBusConnection *connection,
 /* Copied from libcaja/caja-program-choosing.c; Needed in case
  * we have no DESKTOP_STARTUP_ID (with its accompanying timestamp).
  */
-static Time
-slowly_and_stupidly_obtain_timestamp (Display *xdisplay)
+static guint32
+slowly_and_stupidly_obtain_timestamp (GdkDisplay *display)
 {
-	Window xwindow;
-	XEvent event;
+    if (GDK_IS_X11_DISPLAY (display)) {
+        Display *xdisplay;
+        Window xwindow;
+        XEvent event;
+        XSetWindowAttributes attrs;
+        Atom atom_name;
+        Atom atom_type;
+        char *name;
+        xdisplay = GDK_DISPLAY_XDISPLAY (display);
 
-	{
-		XSetWindowAttributes attrs;
-		Atom atom_name;
-		Atom atom_type;
-		const char *name;
 
-		attrs.override_redirect = True;
-		attrs.event_mask = PropertyChangeMask | StructureNotifyMask;
+        attrs.override_redirect = True;
+        attrs.event_mask = PropertyChangeMask | StructureNotifyMask;
 
-		xwindow =
-		    XCreateWindow (xdisplay,
-		                   RootWindow (xdisplay, 0),
-		                   -100, -100, 1, 1,
-		                   0,
-		                   CopyFromParent,
-		                   CopyFromParent,
-		                   (Visual *)CopyFromParent,
-		                   CWOverrideRedirect | CWEventMask,
-		                   &attrs);
+        xwindow = XCreateWindow (xdisplay, RootWindow (xdisplay, 0),
+                -100, -100, 1, 1,
+                0,
+                CopyFromParent,
+                CopyFromParent,
+                CopyFromParent,
+                CWOverrideRedirect | CWEventMask,
+                &attrs);
 
-		atom_name = XInternAtom (xdisplay, "WM_NAME", TRUE);
-		g_assert (atom_name != None);
-		atom_type = XInternAtom (xdisplay, "STRING", TRUE);
-		g_assert (atom_type != None);
+        atom_name = XInternAtom (xdisplay, "WM_NAME", TRUE);
+        g_assert (atom_name != None);
 
-		name = "Fake Window";
-		XChangeProperty (xdisplay,
-		                 xwindow, atom_name,
-		                 atom_type,
-		                 8, PropModeReplace, (unsigned char *)name, strlen (name));
-	}
+        atom_type = XInternAtom (xdisplay, "STRING", TRUE);
+        g_assert (atom_type != None);
 
-	XWindowEvent (xdisplay,
-	              xwindow,
-	              PropertyChangeMask,
-	              &event);
+        name = "Fake Window";
+        XChangeProperty (xdisplay, xwindow, atom_name, atom_type,
+                8, PropModeReplace,
+                (unsigned char *) name, strlen (name));
 
-	XDestroyWindow(xdisplay, xwindow);
+        XWindowEvent (xdisplay, xwindow,
+                PropertyChangeMask,
+                &event);
 
-	return event.xproperty.time;
+        XDestroyWindow(xdisplay, xwindow);
+
+        return event.xproperty.time;
+    } else {
+        guint32 now;
+
+        now = (guint32) (g_get_real_time () / G_USEC_PER_SEC);
+        return now;
+    }
 }
 
 static char *
@@ -555,7 +559,7 @@ main (int argc, char **argv)
 
 	working_directory = g_get_current_dir ();
 
-	gdk_set_allowed_backends ("x11");
+	gdk_set_allowed_backends ("wayland,x11");
 
 	/* Now change directory to $HOME so we don't prevent unmounting, e.g. if the
 	 * factory is started by caja-open-terminal. See bug #565328.
@@ -577,7 +581,6 @@ main (int argc, char **argv)
 	                                  gtk_get_option_group (TRUE),
 	                                  egg_sm_client_get_option_group (),
 	                                  NULL);
-
 	g_free (working_directory);
 
 	if (options == NULL)
@@ -603,11 +606,9 @@ main (int argc, char **argv)
 	if (options->startup_id == NULL)
 	{
 		/* Create a fake one containing a timestamp that we can use */
-		Time timestamp;
-
-		timestamp = slowly_and_stupidly_obtain_timestamp (GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()));
-
-		options->startup_id = g_strdup_printf ("_TIME%lu", timestamp);
+		guint32 timestamp;
+		timestamp = slowly_and_stupidly_obtain_timestamp (display);
+		options->startup_id = g_strdup_printf ("_TIME%lu", (unsigned long) timestamp);
 	}
 
 	if (options->use_factory)
