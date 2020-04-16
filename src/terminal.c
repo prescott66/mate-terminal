@@ -428,61 +428,6 @@ name_lost_cb (GDBusConnection *connection,
  *
  */
 
-/* Copied from libcaja/caja-program-choosing.c; Needed in case
- * we have no DESKTOP_STARTUP_ID (with its accompanying timestamp).
- */
-static guint32
-slowly_and_stupidly_obtain_timestamp (GdkDisplay *display)
-{
-    if (GDK_IS_X11_DISPLAY (display)) {
-        Display *xdisplay;
-        Window xwindow;
-        XEvent event;
-        XSetWindowAttributes attrs;
-        Atom atom_name;
-        Atom atom_type;
-        char *name;
-        xdisplay = GDK_DISPLAY_XDISPLAY (display);
-
-
-        attrs.override_redirect = True;
-        attrs.event_mask = PropertyChangeMask | StructureNotifyMask;
-
-        xwindow = XCreateWindow (xdisplay, RootWindow (xdisplay, 0),
-                -100, -100, 1, 1,
-                0,
-                CopyFromParent,
-                CopyFromParent,
-                CopyFromParent,
-                CWOverrideRedirect | CWEventMask,
-                &attrs);
-
-        atom_name = XInternAtom (xdisplay, "WM_NAME", TRUE);
-        g_assert (atom_name != None);
-
-        atom_type = XInternAtom (xdisplay, "STRING", TRUE);
-        g_assert (atom_type != None);
-
-        name = "Fake Window";
-        XChangeProperty (xdisplay, xwindow, atom_name, atom_type,
-                8, PropModeReplace,
-                (unsigned char *) name, strlen (name));
-
-        XWindowEvent (xdisplay, xwindow,
-                PropertyChangeMask,
-                &event);
-
-        XDestroyWindow(xdisplay, xwindow);
-
-        return event.xproperty.time;
-    } else {
-        guint32 now;
-
-        now = (guint32) (g_get_real_time () / G_USEC_PER_SEC);
-        return now;
-    }
-}
-
 static char *
 get_factory_name_for_display (const char *display_name)
 {
@@ -605,10 +550,7 @@ main (int argc, char **argv)
 
 	if (options->startup_id == NULL)
 	{
-		/* Create a fake one containing a timestamp that we can use */
-		guint32 timestamp;
-		timestamp = slowly_and_stupidly_obtain_timestamp (display);
-		options->startup_id = g_strdup_printf ("_TIME%lu", (unsigned long) timestamp);
+		options->startup_id = g_uuid_string_random ();
 	}
 
 	if (options->use_factory)
