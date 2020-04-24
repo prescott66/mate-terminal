@@ -504,8 +504,6 @@ main (int argc, char **argv)
 
 	working_directory = g_get_current_dir ();
 
-	gdk_set_allowed_backends ("broadway,wayland,x11");
-
 	/* Now change directory to $HOME so we don't prevent unmounting, e.g. if the
 	 * factory is started by caja-open-terminal. See bug #565328.
 	 * On failure back to /.
